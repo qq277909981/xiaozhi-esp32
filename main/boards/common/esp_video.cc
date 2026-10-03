@@ -196,6 +196,22 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
     setformat.fmt.pix.width = format.fmt.pix.width;
     setformat.fmt.pix.height = format.fmt.pix.height;
 
+#ifdef CONFIG_BOARD_TYPE_DF_K10_CAMFIX
+    // K10 只有 8MB PSRAM。编码 640x480 照片时需要约 1.75MB 连续 PSRAM
+    // (frame 副本 + 编码输入缓冲 + 输出缓冲各约 600KB/520KB)，拍照瞬间
+    // 拿不出这么多连续块。强制 QVGA(320x240) 可让这三块缓冲同时缩到约 1/4，
+    // 连同摄像头 DMA 缓冲一起缩小，PSRAM 峰值压力下降 3~4 倍。
+    // 若驱动不支持 320x240，则回退到驱动默认分辨率（相机仍能工作）。
+    {
+        uint32_t camfix_w = setformat.fmt.pix.width;
+        uint32_t camfix_h = setformat.fmt.pix.height;
+        setformat.fmt.pix.width = 320;
+        setformat.fmt.pix.height = 240;
+        ESP_LOGI(TAG, "K10 camfix: requesting capture resolution 320x240 (driver default %ux%u)",
+                 camfix_w, camfix_h);
+    }
+#endif  // CONFIG_BOARD_TYPE_DF_K10_CAMFIX
+
     struct v4l2_fmtdesc fmtdesc = {};
     fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     fmtdesc.index = 0;
@@ -278,6 +294,22 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
 
     ESP_LOGD(TAG, "selected pixel format: 0x%08lx", setformat.fmt.pix.pixelformat);
 
+#ifdef CONFIG_BOARD_TYPE_DF_K10_CAMFIX
+    if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) != 0) {
+        // 320x240 不被支持时，回退到驱动默认分辨率，保证相机仍能初始化
+        ESP_LOGW(TAG, "K10 camfix: VIDIOC_S_FMT 320x240 failed (errno=%d), fallback to driver default",
+                 errno);
+        setformat.fmt.pix.width = format.fmt.pix.width;
+        setformat.fmt.pix.height = format.fmt.pix.height;
+        if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) != 0) {
+            ESP_LOGE(TAG, "VIDIOC_S_FMT failed, errno=%d(%s)", errno, strerror(errno));
+            close(video_fd_);
+            video_fd_ = -1;
+            sensor_format_ = 0;
+            return;
+        }
+    }
+#else
     if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) != 0) {
         ESP_LOGE(TAG, "VIDIOC_S_FMT failed, errno=%d(%s)", errno, strerror(errno));
         close(video_fd_);
@@ -285,6 +317,7 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
         sensor_format_ = 0;
         return;
     }
+#endif  // CONFIG_BOARD_TYPE_DF_K10_CAMFIX
 
 #if CONFIG_XIAOZHI_CAMERA_MIRROR_CONFIGURED
     SetHMirror(kConfiguredHMirror);

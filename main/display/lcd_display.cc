@@ -153,11 +153,11 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
             ESP_LOGI(TAG, "Added %uKB LVGL pool in PSRAM", (unsigned)(added / 1024));
         }
 #endif
-        lv_image_cache_resize(512 * 1024, true);
-        ESP_LOGI(TAG, "Use 512KB of PSRAM for image cache");
+        lv_image_cache_resize(256 * 1024, true);
+        ESP_LOGI(TAG, "Use 256KB of PSRAM for image cache (K10 camfix: save 256KB)");
     } else if (psram_size_mb >= 2) {
-        lv_image_cache_resize(512 * 1024, true);
-        ESP_LOGI(TAG, "Use 512KB of PSRAM for image cache");
+        lv_image_cache_resize(256 * 1024, true);
+        ESP_LOGI(TAG, "Use 256KB of PSRAM for image cache (K10 camfix: save 256KB)");
     }
 #endif
 
