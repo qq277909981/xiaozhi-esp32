@@ -185,6 +185,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_DF_K10
         bool "DFRobot UNIHIKER K10 (行空板 K10)"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_DF_K10_CAMFIX
+        bool "DFRobot UNIHIKER K10 - camera preview fix (自定义板型，不被官方 OTA 覆盖)"
+        depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_DOIT_S3_AIBOX
         bool "DOIT S3 AIBox (四博智联 AI 陪伴盒子)"
         depends on IDF_TARGET_ESP32S3

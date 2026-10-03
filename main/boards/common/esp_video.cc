@@ -796,8 +796,8 @@ bool EspVideo::Capture() {
                 color_format = LV_COLOR_FORMAT_RGB565;
                 data = (uint8_t*)heap_caps_malloc(w * h * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (data == nullptr) {
-                    ESP_LOGE(TAG, "Failed to allocate memory for preview image");
-                    return false;
+                    ESP_LOGW(TAG, "Not enough PSRAM for preview image, capture continues without preview");
+                    break;
                 }
                 esp_imgfx_color_convert_cfg_t convert_cfg = {
                     .in_res = {.width = static_cast<int16_t>(frame_.width),
@@ -841,8 +841,8 @@ bool EspVideo::Capture() {
             case V4L2_PIX_FMT_RGB565:
                 data = (uint8_t*)heap_caps_malloc(w * h * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (data == nullptr) {
-                    ESP_LOGE(TAG, "Failed to allocate memory for preview image");
-                    return false;
+                    ESP_LOGW(TAG, "Not enough PSRAM for preview image, capture continues without preview");
+                    break;
                 }
                 memcpy(data, frame_.data, frame_.len);
                 lvgl_image_size = frame_.len;  // fallthrough 时兼顾 YUYV 与 RGB565
@@ -881,6 +881,9 @@ bool EspVideo::Capture() {
                 return false;
         }
 
+        if (data == nullptr) {
+            return true;
+        }
         auto image =
             std::make_unique<LvglAllocatedImage>(data, lvgl_image_size, w, h, stride, color_format);
         display->SetPreviewImage(std::move(image));
