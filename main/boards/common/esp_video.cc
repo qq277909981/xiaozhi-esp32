@@ -295,10 +295,26 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
     ESP_LOGD(TAG, "selected pixel format: 0x%08lx", setformat.fmt.pix.pixelformat);
 
 #ifdef CONFIG_BOARD_TYPE_DF_K10_CAMFIX
-    if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) != 0) {
-        // 320x240 不被支持时，回退到驱动默认分辨率，保证相机仍能初始化
-        ESP_LOGW(TAG, "K10 camfix: VIDIOC_S_FMT 320x240 failed (errno=%d), fallback to driver default",
-                 errno);
+    // K10 只有 8MB PSRAM。640x480 拍照时软件 JPEG 编码需约 1.1MB 连续 PSRAM，
+    // 拍照瞬间分配不到 -> encode 失败。DVP 驱动对可设分辨率有约束（实测 320x240 被拒，
+    // video_common: input width=320, height=240 is not supported），因此从小到大尝试一组
+    // 候选分辨率，取第一个驱动接受的最小分辨率：既保证能拍，又把编码内存峰值压到最低。
+    static const uint32_t kCamfixCandidates[][2] = {
+        {320, 240}, {352, 288}, {400, 300}, {480, 320}, {640, 480},
+    };
+    bool camfix_ok = false;
+    for (const auto& cand : kCamfixCandidates) {
+        setformat.fmt.pix.width = cand[0];
+        setformat.fmt.pix.height = cand[1];
+        if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) == 0) {
+            ESP_LOGI(TAG, "K10 camfix: capture resolution set to %ux%u", cand[0], cand[1]);
+            camfix_ok = true;
+            break;
+        }
+        ESP_LOGW(TAG, "K10 camfix: VIDIOC_S_FMT %ux%u rejected (errno=%d)", cand[0], cand[1], errno);
+    }
+    if (!camfix_ok) {
+        // 所有候选都被拒，回退到驱动默认分辨率（相机仍能初始化，但拍照可能仍失败）
         setformat.fmt.pix.width = format.fmt.pix.width;
         setformat.fmt.pix.height = format.fmt.pix.height;
         if (ioctl(video_fd_, VIDIOC_S_FMT, &setformat) != 0) {
